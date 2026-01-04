@@ -2545,6 +2545,7 @@
             currentMouseX = e.clientX;
             currentMouseY = e.clientY;
             
+            // 右クリックドラッグ（視点移動）の処理
             if (isDragging) {
                 const dx = e.clientX - lastMouseX;
                 const dy = e.clientY - lastMouseY;
@@ -2557,6 +2558,7 @@
                 return;
             }
 
+            // 自動ホバークリックの処理
             if (isAutoHoverClickUnlocked && !isMouseDown) {
                 isMouseDown = true;
                 lastCleanX = e.clientX;
@@ -2569,7 +2571,18 @@
                 const dy = e.clientY - lastCleanY;
                 const dist = Math.hypot(dx, dy);
                 
-                const steps = Math.ceil(dist);
+                let currentRadius = 1;
+                if (brushLevel <= 3) {
+                    currentRadius = (brushLevel === 0) ? 1 : 2; 
+                } else {
+                    currentRadius = 2 + (brushLevel - 3);
+                    if (brushLevel >= 9) currentRadius += 5;
+                    currentRadius += (infiniteBrushCount * 4);
+                }
+
+
+                const stepSize = Math.max(1, currentRadius / 2);
+                const steps = Math.ceil(dist / stepSize);
                 
                 for (let i = 0; i <= steps; i++) {
                     const t = (steps === 0) ? 1 : i / steps;
