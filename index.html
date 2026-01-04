@@ -2953,7 +2953,7 @@
 		    let deltaTime = (timestamp - lastFrameTime) / 1000;
 		    lastFrameTime = timestamp;
 
-            if (deltaTime > 3.0) deltaTime = 3.0;
+            if (deltaTime > 300.0) deltaTime = 300.0;
 
             // 時間を「溜め」に追加
             accumulator += deltaTime;
