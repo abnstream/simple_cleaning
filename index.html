@@ -591,14 +591,22 @@
 
     <div id="game-container">
         <canvas id="gameCanvas" width="1280" height="720"></canvas>
+        
+        <canvas id="robotCanvas" width="1280" height="720" style="position:absolute; top:0; left:0; pointer-events:none; z-index:3; background: transparent;"></canvas>
+        
         <div id="entity-layer">
-            <div id="hint-box"></div> </div>
+            <div id="hint-box"></div> 
+            </div>
     </div>
 
     <div id="bottom-info">
         <div id="zoom-control-area">
             <span id="zoom-indicator">ZOOM x<span id="zoom-val">1.0</span></span>
             <button id="reset-zoom-btn">Reset</button>
+            
+            <span id="fps-counter" style="margin-left: 15px; color: #00ff00; font-weight: bold;">
+                FPS: <span id="fps-val">0</span>
+            </span>
         </div>
         <div id="save-status">Auto Saving...</div>
     </div>
@@ -902,6 +910,8 @@
         const gameContainer = document.getElementById('game-container');
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const robotCanvas = document.getElementById('robotCanvas');
+        const robotCtx = robotCanvas.getContext('2d');
         const entityLayer = document.getElementById('entity-layer');
         const progressEl = document.getElementById('progress');
         const moneyEl = document.getElementById('money');
@@ -980,10 +990,16 @@
         let autoClickAccumulator = 0; // クリック分を貯める変数
         let lastFrameTime = 0;        // 前回のフレーム時間
         
+        // --- FPS計測用変数 ---
+        let fpsFrameCount = 0;
+        let lastFpsTime = 0;
+        const fpsValEl = document.getElementById('fps-val');
+
         // 無限アップグレードの購入数管理
         let infiniteBrushCount = 0;
         let infiniteRobotAreaCount = 0;
         let infiniteRobotSpeedCount = 0;
+        let infiniteRobotAddCount = 0; // 無限ロボット購入数
 
         let lastCleanX = 0;
         let lastCleanY = 0;
@@ -1346,13 +1362,7 @@
 
         // ★追加: ロボットにクラスを付与する
         function updateGamingLook() {
-            if (isGamingRobotUnlocked) {
-                robots.forEach(r => {
-                    if (!r.el.classList.contains('gaming')) {
-                        r.el.classList.add('gaming');
-                    }
-                });
-            }
+
         }
 
         function updateNotification() {
@@ -1549,7 +1559,6 @@
                 if (canvas) canvas.style.backgroundColor = dirtColor;
 
                 // ロボットの復元
-                robots.forEach(r => r.el.remove());
                 robots = [];
                 if (data.robots && Array.isArray(data.robots)) {
                     data.robots.forEach(r => {
@@ -1604,13 +1613,7 @@
         }
 
         function createRobotEntity(x, y, dirX, dirY) {
-            const el = document.createElement('div');
-            el.className = 'robot';
-            if (isGamingRobotUnlocked) {
-                el.classList.add('gaming');
-            }
-            entityLayer.appendChild(el);
-            robots.push({ x: x, y: y, dirX: dirX, dirY: dirY, el: el });
+            robots.push({ x: x, y: y, dirX: dirX, dirY: dirY });
         }
 
         function addRobot() {
@@ -1679,6 +1682,7 @@
                 }
 
                 updateUI();
+                saveGame();
 
             } catch (e) {
                 console.error("Purchase error:", e);
@@ -1694,6 +1698,7 @@
             else if (type === 'infinite_robot_speed') infiniteRobotSpeedCount++;
             
             updateUI();
+            saveGame();
         }
 
         function cleanRobotArea(cx, cy) {
@@ -1946,14 +1951,15 @@
             }
         }
 
-        function updateRobots() {
+        function updateRobots(dt) {
             let moneyEarnedThisFrame = 0;
             const TARGET_MAG = 1.414; 
+            const timeScale = dt * 60;
             const currentRobotSpeed = robotSpeed + (infiniteRobotSpeedCount * 0.2);
 
             robots.forEach(robot => {
-                robot.x += robot.dirX * currentRobotSpeed;
-                robot.y += robot.dirY * currentRobotSpeed;
+                robot.x += robot.dirX * currentRobotSpeed * timeScale;
+                robot.y += robot.dirY * currentRobotSpeed * timeScale;
 
                 let bounced = false;
                 
@@ -2104,19 +2110,34 @@
         }
 
         function renderEntities() {
-            const baseSize = 6; 
-            const size = baseSize * zoomLevel;
-            const offset = size / 2;
+            robotCtx.clearRect(0, 0, WIDTH, HEIGHT);
 
-            robots.forEach(robot => {
-                const screenX = robot.x * zoomLevel + panX;
-                const screenY = robot.y * zoomLevel + panY;
-                
-                robot.el.style.transform = `translate(${screenX - offset}px, ${screenY - offset}px)`;
-                robot.el.style.width = size + 'px';
-                robot.el.style.height = size + 'px';
-                robot.el.style.borderRadius = '50%';
-            });
+            const baseSize = 6; 
+            
+            let robotColor = '#ff3333'; // 通常色
+            if (isGamingRobotUnlocked) {
+                const hue = (Date.now() / 5) % 360; // 時間で色相回転
+                robotColor = `hsl(${hue}, 100%, 50%)`;
+            }
+
+            robotCtx.fillStyle = robotColor;
+            
+            robotCtx.beginPath();
+
+            for (let i = 0; i < robots.length; i++) {
+                const r = robots[i];
+                robotCtx.moveTo(r.x, r.y);
+                robotCtx.arc(r.x, r.y, 3, 0, Math.PI * 2);
+            }
+            
+            robotCtx.fill();
+            
+            if (isGamingRobotUnlocked) {
+                robotCtx.shadowBlur = 5;
+                robotCtx.shadowColor = robotColor;
+                robotCtx.fill(); // 発光用にもう一度描画（負荷が気になるなら削除可）
+                robotCtx.shadowBlur = 0; // リセット
+            }
         }
 
         function clampPan() {
@@ -2134,7 +2155,10 @@
         }
 
         function applyTransform() {
-            canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+            const transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+            canvas.style.transform = transform;
+            robotCanvas.style.transform = transform;
+            entityLayer.style.transform = transform;
         }
 
         function cleanArea(cx, cy) {
@@ -2874,31 +2898,30 @@
         function gameLoop(timestamp) {
 		    // 初回実行時の時間調整
 		    if (!lastFrameTime) lastFrameTime = timestamp;
+            if (!lastFpsTime) lastFpsTime = timestamp; // ★追加
 		    
-		    // 前回のフレームからの経過時間（秒）を計算
 		    const deltaTime = (timestamp - lastFrameTime) / 1000;
 		    lastFrameTime = timestamp;
 
-		    updateRobots();
+            // ★追加: FPS計算ロジック
+            fpsFrameCount++;
+            if (timestamp - lastFpsTime >= 1000) { // 1秒経過したら更新
+                if (fpsValEl) fpsValEl.textContent = fpsFrameCount;
+                fpsFrameCount = 0;
+                lastFpsTime = timestamp;
+            }
+
+		    updateRobots(deltaTime);
 		    updatePlasma(); 
 		    updatePurification(); 
 		    renderEntities();
 		    updateHint();
 
-		    // --- 自動クリック処理の最適化版 ---
+		    // --- 自動クリック処理 ---
 		    if (isMouseDown && autoClickRate > 0) {
-		        // 経過時間 × 速度 分のクリック回数を貯める
 		        autoClickAccumulator += autoClickRate * deltaTime;
-
-		        // 1回分以上貯まっていたら実行
-		        // ※「マウス位置が変わっていないのに何度も描画する」無駄を防ぐため、
-		        //   ループはさせず、貯まっている分を1回だけ実行して消費します。
-		        //   （このゲームの仕様上、同じ場所を連打しても意味がないためこれで軽量化されます）
 		        if (autoClickAccumulator >= 1) {
 		            attemptClean(currentMouseX, currentMouseY);
-		            
-		            // 貯まった分を消費（余剰分は次回に持ち越し）
-		            // ただし、極端に溜まりすぎた場合（ラグなど）はリセットしてフリーズを防ぐ
 		            if (autoClickAccumulator > 5) {
 		                 autoClickAccumulator = 0;
 		            } else {
@@ -2906,10 +2929,8 @@
 		            }
 		        }
 		    } else {
-		        // クリックしていない時はリセット
 		        autoClickAccumulator = 0;
 		    }
-		    // ----------------------------------
 		    
 		    if (timestamp - lastUIUpdate > 33) {
 		        updateUI();
