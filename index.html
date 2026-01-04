@@ -1404,6 +1404,7 @@
             if (isResetting) return;
             showSaveStatus();
             
+            // ピクセルデータの圧縮保存
             const buffer = new Uint8Array(Math.ceil(TOTAL_PIXELS / 8));
             for (let idx of cleanedPixels) {
                 const byteIndex = Math.floor(idx / 8);
@@ -1422,6 +1423,9 @@
             }));
 
             const saveData = {
+                // ★追加: サウンド状態の保存
+                isSoundEnabled: sound.isEnabled,
+
                 money: money,
                 brushLevel: brushLevel,
                 isZoomUnlocked: isZoomUnlocked,
@@ -1451,7 +1455,6 @@
                 isPurificationUnlocked: isPurificationUnlocked,
                 dirtColor: dirtColor,
                 isColorPaletteUnlocked: isColorPaletteUnlocked,
-                // ★追加
                 isPlasmaBoostUnlocked: isPlasmaBoostUnlocked,
                 isGamingRobotUnlocked: isGamingRobotUnlocked,
                 isRobotMassProduction5Unlocked: isRobotMassProduction5Unlocked,
@@ -1473,6 +1476,33 @@
 
             try {
                 const data = JSON.parse(json);
+
+                // ★追加: サウンド状態の読み込みと復元
+                if (data.isSoundEnabled !== undefined) {
+                    sound.isEnabled = data.isSoundEnabled;
+                    
+                    // ボタンの見た目を更新
+                    const soundBtn = document.getElementById('sound-toggle-btn');
+                    if (soundBtn) {
+                        soundBtn.textContent = sound.isEnabled ? "SOUND: ON" : "SOUND: OFF";
+                        soundBtn.style.color = sound.isEnabled ? "#0f0" : "#fff";
+                        soundBtn.style.borderColor = sound.isEnabled ? "#0f0" : "#fff";
+                    }
+
+                    // サウンドONの場合、最初のクリックでAudioContextを初期化する
+                    if (sound.isEnabled) {
+                        const initAudioOnFirstClick = () => {
+                            if (!sound.ctx) sound.init();
+                            if (sound.ctx && sound.ctx.state === 'suspended') sound.ctx.resume();
+                            // イベントリスナーを解除（1回だけ実行）
+                            window.removeEventListener('click', initAudioOnFirstClick);
+                            window.removeEventListener('keydown', initAudioOnFirstClick);
+                        };
+                        window.addEventListener('click', initAudioOnFirstClick);
+                        window.addEventListener('keydown', initAudioOnFirstClick);
+                    }
+                }
+
                 money = data.money || 0;
                 brushLevel = data.brushLevel || 0;
                 isZoomUnlocked = data.isZoomUnlocked || false;
@@ -1507,14 +1537,14 @@
                 dirtColor = data.dirtColor || '#87CEEB';
                 isColorPaletteUnlocked = data.isColorPaletteUnlocked || false;
 
-                // ★追加: ページ3変数のロード
                 isPlasmaBoostUnlocked = data.isPlasmaBoostUnlocked || false;
                 isGamingRobotUnlocked = data.isGamingRobotUnlocked || false;
                 isRobotMassProduction5Unlocked = data.isRobotMassProduction5Unlocked || false;
 
-                dirtColorPicker.value = dirtColor;
-                canvas.style.backgroundColor = dirtColor;
+                if (dirtColorPicker) dirtColorPicker.value = dirtColor;
+                if (canvas) canvas.style.backgroundColor = dirtColor;
 
+                // ロボットの復元
                 robots.forEach(r => r.el.remove());
                 robots = [];
                 if (data.robots && Array.isArray(data.robots)) {
@@ -1529,6 +1559,7 @@
                     });
                 }
 
+                // 掃除済みピクセルの復元
                 if (data.pixels) {
                     cleanedPixels.clear();
                     cleanedCount = 0;
