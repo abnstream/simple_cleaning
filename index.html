@@ -849,10 +849,10 @@
 
         const PREMIUM_UPGRADES = [
             // Page 1
-            { id: 'p1', page: 1, costPt: 1, name: "プレミアムコース", desc: "通常ショップに強力な6個目のアイテムを追加します", unique: true },
+            { id: 'p1', page: 1, costPt: 1, name: "プレミアムコース", desc: "ショップに強力なアップグレードを追加します", unique: true },
             { id: 'p2', page: 1, baseCost: 1, name: "ロボット追加", desc: "ロボットを1台追加します (最大3回)", unique: false },
-            { id: 'p3', page: 1, costPt: 3, name: "限界突破", desc: "ショップのページ5(無限強化)を解放します", unique: true },
-            { id: 'p4', page: 1, costPt: 5, name: "お掃除AI", desc: "壁反射時に近くに汚れがない場合、最も近い汚れを狙います", unique: true, reqRobotMax: true },
+            { id: 'p3', page: 1, costPt: 3, name: "限界突破", desc: "ショップのページ5を解放します", unique: true },
+            { id: 'p4', page: 1, costPt: 5, name: "お掃除AI", desc: "お掃除ロボットが反射するときにある程度汚れを狙うようになります", unique: true, reqRobotMax: true },
             { id: 'p5', page: 1, costPt: 5, name: "クリック代行", desc: "画面内にマウスがあるだけで、常にクリックしている状態になります", unique: true, reqAI: true },
             
             // Page 2
@@ -863,7 +863,7 @@
             { id: 'p10', page: 2, costPt: 5, name: "カラーパレット", desc: "画面右下に汚れの色を自由に変更できるボタンを追加します", unique: true, reqMassProductionMax: true },
 
             // ★追加 Page 3
-            { id: 'p11', page: 3, costPt: 10, name: "プラズマ強化", desc: "プラズマが最も近いロボットと2番目に近いロボットの間で発生します", unique: true },
+            { id: 'p11', page: 3, costPt: 10, name: "プラズマ強化", desc: "プラズマが最も近いロボットと最も遠いロボットの間で発生します", unique: true },
             { id: 'p12', page: 3, costPt: 10, name: "ロボット大量生産", desc: "ロボットを5体追加します", unique: true },
             { id: 'p13', page: 3, costPt: 10, name: "ゲーミングロボット", desc: "ロボットが虹色に輝くようになります", unique: true }
         ];
@@ -1103,9 +1103,9 @@
             // 重複を防ぐため、IDを使って「既に存在するか」をチェックします
             if (currentShopPage === 5) {
                 const infinites = [
-                    { type: 'infinite_brush', id: 'inf-brush', name: "【無限】ブラシ拡張", baseDesc: "ブラシ半径 アップ", count: infiniteBrushCount },
-                    { type: 'infinite_robot_area', id: 'inf-area', name: "【無限】ロボット範囲", baseDesc: "ロボット掃除半径 アップ", count: infiniteRobotAreaCount },
-                    { type: 'infinite_robot_speed', id: 'inf-speed', name: "【無限】ロボット速度", baseDesc: "ロボット速度 アップ", count: infiniteRobotSpeedCount }
+                    { type: 'infinite_brush', id: 'inf-brush', name: "【限界突破】ブラシ拡張", baseDesc: "ブラシ半径 アップ", count: infiniteBrushCount },
+                    { type: 'infinite_robot_area', id: 'inf-area', name: "【限界突破】ロボット範囲", baseDesc: "ロボット掃除半径 アップ", count: infiniteRobotAreaCount },
+                    { type: 'infinite_robot_speed', id: 'inf-speed', name: "【限界突破】ロボット速度", baseDesc: "ロボット速度 アップ", count: infiniteRobotSpeedCount }
                 ];
 
                 infinites.forEach(inf => {
