@@ -1735,8 +1735,7 @@
             if (!isPlasmaUnlocked || robots.length < 2) return;
             
             const now = Date.now();
-            if (now - lastPlasmaTime < 3000) return;
-            lastPlasmaTime = now;
+            // グローバルなタイマー判定 (now - lastPlasmaTime < 3000) を削除
 
             let rBase = 2 + (robotBrushLevel || 0);
             if (robotBrushLevel >= 4) rBase += 2;
@@ -1744,23 +1743,58 @@
             const plasmaRadius = Math.max(1, Math.floor(rBase / 2));
 
             robots.forEach(r1 => {
-                // 他の全ロボットとの距離を計算し、近い順（昇順）にソート
-                const others = robots.filter(r => r !== r1).map(r => {
-                    const distSq = (r.x - r1.x)**2 + (r.y - r1.y)**2;
-                    return { r: r, distSq: distSq };
-                }).sort((a, b) => a.distSq - b.distSq);
+                // ■ ロボット個別のタイマー初期化（初回のみランダムにずらす）
+                if (!r1.nextPlasmaTime) {
+                    r1.nextPlasmaTime = now + Math.random() * 3000;
+                }
 
-                if (others.length > 0) {
-                    // 1. 通常プラズマ: 一番近いロボットへ発射
-                    firePlasma(r1, others[0].r, plasmaRadius);
+                // まだ撃てないならスキップ
+                if (now < r1.nextPlasmaTime) return;
+
+                // --- ここから探索処理 ---
+                let nearest = null;
+                let nearestDistSq = Infinity;
+                let farthest = null;
+                let farthestDistSq = -1;
+
+                // 高速化のため、探索も「全員」ではなく「ランダムな10体」程度に絞る手もありますが、
+                // タイミング分散させたので全探索でも十分軽いはずです。
+                for (let i = 0; i < robots.length; i++) {
+                    const r2 = robots[i];
+                    if (r1 === r2) continue;
+
+                    const dx = r2.x - r1.x;
+                    const dy = r2.y - r1.y;
+                    const distSq = dx*dx + dy*dy;
                     
-                    // 2. プラズマ強化: 一番遠いロボットへ発射
-                    if (isPlasmaBoostUnlocked && others.length > 1) {
-                        // 配列の最後（others.length - 1）が一番遠いロボットになります
-                        const farthestRobot = others[others.length - 1].r;
-                        firePlasma(r1, farthestRobot, plasmaRadius);
+                    // 遠すぎる相手(画面半分以上離れてるなど)は計算対象外にする簡易フィルタを入れても良い
+                    // if (distSq > (WIDTH/2)**2) continue; 
+
+                    if (distSq < nearestDistSq) {
+                        nearestDistSq = distSq;
+                        nearest = r2;
+                    }
+                    if (isPlasmaBoostUnlocked) {
+                        if (distSq > farthestDistSq) {
+                            farthestDistSq = distSq;
+                            farthest = r2;
+                        }
                     }
                 }
+
+                let fired = false;
+                if (nearest) {
+                    firePlasma(r1, nearest, plasmaRadius);
+                    fired = true;
+                }
+                if (isPlasmaBoostUnlocked && farthest && farthest !== nearest) {
+                    firePlasma(r1, farthest, plasmaRadius);
+                    fired = true;
+                }
+
+                // 次回の発射時間をセット（3秒後 + ランダム0.5秒）
+                // firedがfalse（相手がいなかった）場合でも、少し待機させる
+                r1.nextPlasmaTime = now + 3000 + Math.random() * 500;
             });
         }
 
@@ -1770,35 +1804,40 @@
             const dy = r2.y - r1.y;
             const dist = Math.hypot(dx, dy);
             
-            // --- 【改善点1】 描画範囲を少し広げて塗り残しを防ぐ ---
-            // 論理的なサイズよりも少しだけ太く描画することで、
-            // 「データ上は掃除済みだが、画面が塗られていない」というバグを防ぎます
-            ctx.lineCap = 'round';       
-            ctx.lineWidth = (radius * 2) + 2;  // +2px 太くする
-            ctx.strokeStyle = '#000000'; 
+            // ■ 1. ビジュアル描画（DOMではなくCanvasに直接描く）
+            // これが最も高速です。色は水色半透明。
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineWidth = (radius * 2) + 4; // 少し太めに
+            ctx.strokeStyle = 'rgba(173, 216, 230, 0.6)'; // 水色、発光感
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#fff';
+            
             ctx.beginPath();
             ctx.moveTo(r1.x, r1.y);
             ctx.lineTo(r2.x, r2.y);
             ctx.stroke();
+            ctx.restore();
 
-            // --- 【改善点2】 論理計算と補正描画 ---
-            // 基本は上のstrokeで塗れていますが、エッジ部分などの微細な塗り漏れを防ぐため、
-            // 「今回新しく掃除したピクセル」に限って、念押しでドット描画を行います。
-            // ※「新規箇所」だけなので、処理落ちは起きにくい設計です。
-            
-            const stepSize = Math.max(1, radius / 2); 
+            // ■ 2. データの掃除処理（計算の間引き）
+            // 以前は radius/2 でしたが、ここを大きくすることでループ回数を激減させます。
+            // 見た目は上の stroke で塗れているので、判定は飛び飛びでも「塗られてない感」は出ません。
+            const stepSize = Math.max(4, radius); // ステップ幅を大きくする
             const steps = Math.ceil(dist / stepSize);
             
             let earned = 0;
             const r2Sq = radius * radius;
 
-            // 描画負荷を下げるため、fillStyleの設定はループ外で1回だけ行う
+            // 負荷軽減のため、描画色設定はループ外で
             ctx.fillStyle = '#000000'; 
 
             for (let i = 0; i <= steps; i++) {
                 const t = (steps === 0) ? 0 : i / steps;
                 const cx = Math.floor(r1.x + dx * t);
                 const cy = Math.floor(r1.y + dy * t);
+
+                // 範囲外チェック（簡易）
+                if (cx < -radius || cx >= WIDTH + radius || cy < -radius || cy >= HEIGHT + radius) continue;
 
                 for (let py = -radius; py <= radius; py++) {
                     const ty = cy + py;
@@ -1811,16 +1850,14 @@
 
                             const idx = ty * WIDTH + tx;
                             
-                            // 「まだ掃除されていない場所」だけ処理する
+                            // 未掃除のみ処理
                             if (!cleanedPixels.has(idx)) {
                                 cleanedPixels.add(idx);
-                                onCleanHit(idx);
+                                // onCleanHit(idx); // ヒント更新が重ければコメントアウト可
                                 cleanedCount++;
                                 earned++;
-                                
-                                // ★ここが重要: 
-                                // データ更新と同時に、その1点を確実に黒く塗る
-                                // (strokeで塗れているはずだが、念のため上書きする)
+                                // 既にstrokeで塗られているので、fillRectを省略しても見た目はOK
+                                // 念のため確実に黒くしたい場合のみ残す（strokeが半透明だと透けるため、黒で上書き推奨）
                                 ctx.fillRect(tx, ty, 1, 1);
                             }
                         }
@@ -1831,32 +1868,16 @@
             if (earned > 0) {
                 money += earned;
                 statRobotCleaned += earned;
-                sound.playClean(); 
+                // 音は連続再生されすぎないように制限しても良い
+                if (Math.random() < 0.3) sound.playClean(); 
             }
 
-            // --- 3. ビジュアルエフェクト (DOM) ---
-            const beam = document.createElement('div');
-            beam.className = 'plasma-beam';
-            
-            const screenX1 = r1.x * zoomLevel + panX;
-            const screenY1 = r1.y * zoomLevel + panY;
-            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-            const screenDist = dist * zoomLevel;
-            const screenThickness = (radius * 2) * zoomLevel;
+            // ■ 3. DOMエフェクト (廃止)
+            // 以前の div.plasma-beam 生成コードは全て削除しました。
+            // Canvasの描画だけで十分エフェクトとして機能します。
 
-            beam.style.width = `${screenDist}px`;
-            beam.style.height = `${Math.max(2, screenThickness)}px`;
-            beam.style.left = `${screenX1}px`;
-            beam.style.top = `${screenY1 - (Math.max(2, screenThickness)/2)}px`;
-            beam.style.transform = `rotate(${angle}deg)`;
-
-            entityLayer.appendChild(beam);
-
-            setTimeout(() => {
-                beam.style.opacity = 0;
-                setTimeout(() => beam.remove(), 800); 
-            }, 100);
-            sound.playPlasma(); // ★追加
+            // 音は控えめに
+            if (Math.random() < 0.1) sound.playPlasma();
         }
 
         function updatePurification() {
@@ -1984,25 +2005,61 @@
                         let targetX = -1;
                         let targetY = -1;
 
-                        const remainingPixels = TOTAL_PIXELS - cleanedCount;
-                        const step = (remainingPixels < 2000) ? 1 : 4;
-                        
-                        for (let y = 0; y < HEIGHT; y += step) {
-                            for (let x = 0; x < WIDTH; x += step) {
-                                const idx = y * WIDTH + x;
-                                if (!cleanedPixels.has(idx)) {
-                                    const dx = x - robot.x;
-                                    const dy = y - robot.y;
-                                    const distSq = dx*dx + dy*dy;
-                                    if (distSq < minDistSq) {
-                                        minDistSq = distSq;
-                                        targetX = x;
-                                        targetY = y;
+                        // 【軽量化プランA】 ランダムサンプリング
+                        // 全画素を見るのではなく、ランダムに60箇所ほどピックアップして
+                        // その中で一番近い汚れを目指します。
+                        // 汚れがたくさんある時は、高確率でこれで十分なターゲットが見つかります。
+                        const attempts = 60;
+                        for (let i = 0; i < attempts; i++) {
+                            const rx = Math.floor(Math.random() * WIDTH);
+                            const ry = Math.floor(Math.random() * HEIGHT);
+                            const idx = ry * WIDTH + rx;
+
+                            if (!cleanedPixels.has(idx)) {
+                                const dx = rx - robot.x;
+                                const dy = ry - robot.y;
+                                const distSq = dx*dx + dy*dy;
+                                if (distSq < minDistSq) {
+                                    minDistSq = distSq;
+                                    targetX = rx;
+                                    targetY = ry;
+                                }
+                            }
+                        }
+
+                        // 【軽量化プランB】 粗い走査（バックアップ）
+                        // ランダムで見つからなかった場合（＝汚れが残りわずかな場合）のみ、
+                        // グリッド走査を行いますが、間隔(step)を大きくして負荷を下げます。
+                        if (targetX === -1) {
+                            const remainingPixels = TOTAL_PIXELS - cleanedCount;
+                            
+                            // 残りピクセル数に応じて精度を変える（以前より粗く設定）
+                            // 20px刻みでも十分ロボットは近くを通ります
+                            const step = (remainingPixels < 1000) ? 5 : 40; 
+                            
+                            // 負荷分散のため、開始位置をランダムにずらす
+                            const startY = Math.floor(Math.random() * step);
+                            const startX = Math.floor(Math.random() * step);
+
+                            for (let y = startY; y < HEIGHT; y += step) {
+                                for (let x = startX; x < WIDTH; x += step) {
+                                    const idx = y * WIDTH + x;
+                                    if (!cleanedPixels.has(idx)) {
+                                        const dx = x - robot.x;
+                                        const dy = y - robot.y;
+                                        const distSq = dx*dx + dy*dy;
+                                        // 以前見つけた候補（ランダム探索での候補はないはずだが念のため）より近ければ更新
+                                        if (distSq < minDistSq) {
+                                            minDistSq = distSq;
+                                            targetX = x;
+                                            targetY = y;
+                                        }
                                     }
                                 }
                             }
                         }
                         
+                        // ターゲットが見つかった場合、方向を更新
                         if (targetX !== -1) {
                             const currentSpeed = Math.hypot(robot.dirX, robot.dirY);
                             if (currentSpeed > 0) {
