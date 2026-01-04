@@ -18,20 +18,45 @@
             overflow: hidden;
         }
 
-        /* --- UI周り --- */
+       /* --- UI周り --- */
         #ui-bar {
             width: 1280px;
             display: grid;
-            grid-template-columns: 1fr auto 1fr;
+            grid-template-columns: 1fr auto 1fr; /* 左・中央・右 の3分割 */
             align-items: center;
             margin-bottom: 10px;
             position: relative;
         }
 
-        /* 左上エリア (周回数 & プレミアム) */
+        /* 左エリア */
         #top-left-info {
             grid-column: 1;
             display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        /* ... (中略: #cycle-container などのスタイルはそのまま) ... */
+
+        /* ★変更: 中央エリア (統計 + 進行率) */
+        #center-panel {
+            grid-column: 2;
+            display: flex;
+            align-items: center;
+            gap: 20px; /* ボタンと進行率の間隔 */
+        }
+
+        #progress-container {
+            /* grid-column: 2; を削除 */
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        /* 右エリア */
+        #right-panel {
+            grid-column: 3;
+            display: flex;
+            justify-content: flex-end;
             align-items: center;
             gap: 15px;
         }
@@ -547,12 +572,15 @@
             <div id="ppt-container">P.Pt <span id="ppt-val">0</span></div>
         </div>
 
-        <div id="progress-container">
-            進行率: <span id="progress">00.00</span>%
+        <div id="center-panel">
+            <button id="settings-btn">統計</button>
+            <div id="progress-container">
+                進行率: <span id="progress">00.00</span>%
+            </div>
         </div>
+
         <div id="right-panel">
             <button id="shop-btn">ショップ</button>
-            <button id="settings-btn">統計</button>
             <div id="money-container">
                 所持金: <span id="money">0</span> G
             </div>
