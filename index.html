@@ -989,8 +989,6 @@
 
         let autoClickAccumulator = 0; // クリック分を貯める変数
         let lastFrameTime = 0;        // 前回のフレーム時間
-        let accumulator = 0; 
-        const FIXED_STEP = 1 / 60; // 1ステップを常に1/60秒（約0.016秒）とする
         
         // --- FPS計測用変数 ---
         let fpsFrameCount = 0;
@@ -2898,47 +2896,28 @@
         });
 
         function gameLoop(timestamp) {
+		    // 初回実行時の時間調整
 		    if (!lastFrameTime) lastFrameTime = timestamp;
-            if (!lastFpsTime) lastFpsTime = timestamp;
+            if (!lastFpsTime) lastFpsTime = timestamp; // ★追加
 		    
-		    let deltaTime = (timestamp - lastFrameTime) / 1000;
+		    const deltaTime = (timestamp - lastFrameTime) / 1000;
 		    lastFrameTime = timestamp;
 
-            // ■ バックグラウンド復帰時のフリーズ防止
-            // あまりに時間が空きすぎた場合（1秒以上）、最大1秒分までの計算に留める
-            if (deltaTime > 1.0) deltaTime = 1.0;
-
-            // 時間を「溜め」に追加
-            accumulator += deltaTime;
-
-            // ■ サブステッピング処理 (ここが重要！)
-            // 「溜まっている時間」が「1ステップ分」ある限り、ループして少しずつ動かす
-            while (accumulator >= FIXED_STEP) {
-                // ロボットの移動は常に「1/60秒分」として計算させる
-                updateRobots(FIXED_STEP);
-                
-                // プラズマ判定などもここで細かく回すと正確になります
-                // (ただし重くなる場合はwhileループの外に出してもOK)
-                updatePlasma(); 
-                
-                accumulator -= FIXED_STEP;
-            }
-
-            // --- FPS計測 ---
+            // ★追加: FPS計算ロジック
             fpsFrameCount++;
-            if (timestamp - lastFpsTime >= 1000) {
+            if (timestamp - lastFpsTime >= 1000) { // 1秒経過したら更新
                 if (fpsValEl) fpsValEl.textContent = fpsFrameCount;
                 fpsFrameCount = 0;
                 lastFpsTime = timestamp;
             }
 
-            // 描画やUI更新は「現在のコマ」で1回やればOK
+		    updateRobots(deltaTime);
+		    updatePlasma(); 
 		    updatePurification(); 
 		    renderEntities();
 		    updateHint();
 
-		    // 自動クリック処理 (これも時間ベースなので accumulator 方式にするのが理想ですが、
-            // 簡易的に deltaTime ベースのままでも致命的なバグにはなりません)
+		    // --- 自動クリック処理 ---
 		    if (isMouseDown && autoClickRate > 0) {
 		        autoClickAccumulator += autoClickRate * deltaTime;
 		        if (autoClickAccumulator >= 1) {
