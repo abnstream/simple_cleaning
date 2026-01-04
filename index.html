@@ -622,9 +622,19 @@
                 連打ツール使ってない？<br>
                 フェアに行こうよ
             </p>
+            
+            <div id="apology-container" style="display: none; margin-top: 15px; border-top: 1px solid #500; padding-top: 15px;">
+                <p style="font-size: 0.9em; color: #ffaaaa; margin-bottom: 10px;">
+                    警告が3回を超えました。<br>
+                    解除するには以下と同じ文章を入力してください：
+                </p>
+                <p style="font-weight: bold; color: #fff; margin-bottom: 10px;">「ごめんなさい。もうしません」</p>
+                <input type="text" id="apology-input" style="width: 80%; padding: 8px; text-align: center; font-family: inherit;" placeholder="ここに入力">
+            </div>
+
         </div>
         <div class="modal-footer" style="justify-content: center; border-top-color: #555;">
-            <button id="spam-ok-btn" style="width: 100px; border-color: #ff0000; color: #ffcccc;">OK</button>
+            <button id="spam-ok-btn" style="width: 200px; border-color: #ff0000; color: #ffcccc;">OK</button>
         </div>
     </div>
 
@@ -1052,8 +1062,13 @@
         let isGamingRobotUnlocked = false;
         let isRobotMassProduction5Unlocked = false; // ロボット大量生産(5体)
 
+        const apologyContainer = document.getElementById('apology-container');
+        const apologyInput = document.getElementById('apology-input');
+        const TARGET_APOLOGY = "ごめんなさい。もうしません";
+
         // 1秒ごとにクリック数をチェックするタイマー
         setInterval(() => {
+            // モーダル表示中はカウントしない
             if (spamModal.style.display === 'flex') {
                 currentSecondClicks = 0;
                 return;
@@ -1066,21 +1081,55 @@
             }
 
             if (spamConsecutiveSeconds >= SPAM_DURATION_SEC) {
+                statSpamWarnings++; // 警告回数を加算
+                
+                // モーダルを表示
                 openModal(spamModal);
-                sound.playError(); 
-                statSpamWarnings++;
+                sound.playError();
+                
+                // 枠外クリックで閉じられないようにする
                 overlay.removeEventListener('click', closeAllModals); 
+
+                // ★3回目以上のペナルティ判定
+                if (statSpamWarnings >= 3) {
+                    apologyContainer.style.display = 'block'; // 入力欄を表示
+                    apologyInput.value = '';              // 入力欄をクリア
+                    spamOkBtn.disabled = true;            // OKボタンを無効化
+                    spamOkBtn.style.opacity = 0.3;
+                    spamOkBtn.textContent = "チッ、反省してまーす";
+                } else {
+                    apologyContainer.style.display = 'none';
+                    spamOkBtn.disabled = false;
+                    spamOkBtn.style.opacity = 1;
+                    spamOkBtn.textContent = "OK";
+                }
             }
 
             currentSecondClicks = 0;
         }, 1000);
 
+        apologyInput.addEventListener('input', (e) => {
+            if (e.target.value === TARGET_APOLOGY) {
+                spamOkBtn.disabled = false;
+                spamOkBtn.style.opacity = 1;
+                spamOkBtn.textContent = "反省した";
+                sound.playBuy(); // 正解したときにチャリーンと鳴らす（お好みで）
+            } else {
+                spamOkBtn.disabled = true;
+                spamOkBtn.style.opacity = 0.3;
+                spamOkBtn.textContent = "チッ、反省してまーす";
+            }
+        });
+
         // お仕置き解除ボタン
         spamOkBtn.addEventListener('click', () => {
+            // ボタンが無効なら何もしない（念のため）
+            if (spamOkBtn.disabled) return;
+
             closeAllModals();
             spamConsecutiveSeconds = 0;
             currentSecondClicks = 0;
-            overlay.addEventListener('click', closeAllModals);
+            overlay.addEventListener('click', closeAllModals); // 枠外クリック復活
         });
 
         // --- 初期化 ---
@@ -2904,9 +2953,7 @@
 		    let deltaTime = (timestamp - lastFrameTime) / 1000;
 		    lastFrameTime = timestamp;
 
-            // ■ バックグラウンド復帰時のフリーズ防止
-            // あまりに時間が空きすぎた場合（1秒以上）、最大1秒分までの計算に留める
-            if (deltaTime > 1.0) deltaTime = 1.0;
+            if (deltaTime > 300.0) deltaTime = 300.0;
 
             // 時間を「溜め」に追加
             accumulator += deltaTime;
