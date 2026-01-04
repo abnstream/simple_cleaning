@@ -894,7 +894,8 @@
             // ★追加 Page 3
             { id: 'p11', page: 3, costPt: 10, name: "プラズマ強化", desc: "プラズマが最も近いロボットと最も遠いロボットの間で発生します", unique: true },
             { id: 'p12', page: 3, costPt: 10, name: "ロボット大量生産", desc: "ロボットを5体追加します", unique: true },
-            { id: 'p13', page: 3, costPt: 10, name: "ゲーミングロボット", desc: "ロボットが虹色に輝くようになります", unique: true }
+            { id: 'p13', page: 3, costPt: 10, name: "ゲーミングロボット", desc: "ロボットが虹色に輝くようになります", unique: true },
+            { id: 'p14', page: 3, name: "無限ロボット増設", desc: "ロボットを1機追加します (何度でも購入可)", unique: false, reqStage100: true }
         ];
 
         // --- DOM取得 ---
@@ -1459,6 +1460,7 @@
                 isPlasmaBoostUnlocked: isPlasmaBoostUnlocked,
                 isGamingRobotUnlocked: isGamingRobotUnlocked,
                 isRobotMassProduction5Unlocked: isRobotMassProduction5Unlocked,
+                infiniteRobotAddCount: infiniteRobotAddCount,
                 
                 robots: robotsData,
                 pixels: pixelData
@@ -1477,6 +1479,7 @@
 
             try {
                 const data = JSON.parse(json);
+                infiniteRobotAddCount = data.infiniteRobotAddCount || 0;
 
                 // ★追加: サウンド状態の読み込みと復元
                 if (data.isSoundEnabled !== undefined) {
@@ -2249,10 +2252,12 @@
             // ページ2の完了条件: ロボット量産(Lv3) + プラズマ + 自動進行 + 浄化 + カラーパレット
             const isPage2Complete = (massProductionCount >= 3 && isPlasmaUnlocked && isAutoProgressUnlocked && isPurificationUnlocked && isColorPaletteUnlocked);
             
+
+            
             // maxPageの計算
             let maxPage = 1;
-            if (isAutoHoverClickUnlocked) maxPage = 2; // クリック代行でページ2解放
-            if (isPage2Complete) maxPage = 3;          // ページ2コンプでページ3解放
+            if (isAutoHoverClickUnlocked) maxPage = 2;
+            if (isPage2Complete || cycleCount >= 100) maxPage = 3; 
 
             premiumPageNumEl.textContent = currentPremiumPage;
             premiumPageMaxEl.textContent = maxPage;
@@ -2272,6 +2277,7 @@
                 if (item.reqRobotMax && extraRobotCount < 3) return;
                 if (item.reqAI && !isRobotAIUnlocked) return;
                 if (item.reqMassProductionMax && massProductionCount < 3) return; 
+                if (item.reqStage100 && cycleCount < 100) return;
 
                 const div = document.createElement('div');
                 div.className = 'premium-item';
@@ -2348,6 +2354,11 @@
                     cost = item.costPt;
                     btnText = `${cost} Pt`;
                 }
+                else if (item.id === 'p14') {
+                    // コスト計算: 8 * 1.5のn乗 (切り上げ)
+                    cost = Math.ceil(8 * Math.pow(1.5, infiniteRobotAddCount));
+                    btnText = `${cost.toLocaleString()} Pt`;
+                }
 
                 let btnHtml = '';
                 if (isPurchased) {
@@ -2390,6 +2401,9 @@
             else if (id === 'p11') cost = item.costPt;
             else if (id === 'p12') cost = item.costPt;
             else if (id === 'p13') cost = item.costPt;
+            else if (id === 'p14') {
+                cost = Math.ceil(8 * Math.pow(1.5, infiniteRobotAddCount));
+            }
 
             if (premiumPoints < cost) return;
 
@@ -2456,6 +2470,13 @@
                 isGamingRobotUnlocked = true;
                 updateGamingLook(); // 即座に見た目を反映
                 alert("ゲーミングモードON！\nロボットが七色に輝き始めました！");
+            }
+            else if (id === 'p14') {
+                premiumPoints -= cost;
+                infiniteRobotAddCount++;
+                addRobot();
+                // 連続購入しやすいようにアラートは出さず、音だけ鳴らすのがオススメです
+                // alert("ロボットを追加しました！"); 
             }
 
             updatePremiumShop();
